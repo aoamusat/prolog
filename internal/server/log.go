@@ -40,3 +40,4 @@ func (c *Log) Read(offset uint64) (Record, error) {
 }
 
 var ErrOffsetNotFound = fmt.Errorf("offset not found")
+var ErrOffsetOutOfRange = fmt.Errorf("offset out of range")

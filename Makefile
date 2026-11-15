@@ -5,7 +5,7 @@ PORT ?= 5010
 HOST ?= localhost
 GO ?= go
 
-.PHONY: all build run clean test
+.PHONY: all build run clean test compile
 
 all: build
 
@@ -23,5 +23,5 @@ clean:
 test:
 	$(GO) test -race -v ./...
 
-protogen:
-	protoc api/v1/*.proto --go_out=. --go_opt=paths=source_relative --proto_path=.
+compile:
+	@protoc api/v1/*.proto --go_out=. --go-grpc_out=. --go_opt=paths=source_relative --go-grpc_opt=paths=source_relative --proto_path=.
