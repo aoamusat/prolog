@@ -12,6 +12,8 @@ type ErrOffsetOutOfRange struct {
 	Offset uint64
 }
 
+var _ error = *new(ErrOffsetOutOfRange)
+
 func (e ErrOffsetOutOfRange) Error() string {
 	return fmt.Sprintf("offset out of range: %d", e.Offset)
 }
