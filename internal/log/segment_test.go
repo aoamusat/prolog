@@ -12,7 +12,7 @@ import (
 
 func TestSegment(t *testing.T) {
 	dir, _ := os.MkdirTemp("", "segment-test")
-	defer os.RemoveAll(dir)
+	t.Cleanup(func() { require.NoError(t, os.RemoveAll(dir)) })
 	want := &api.Record{Value: []byte("hello world")}
 	c := Config{}
 	c.Segment.MaxStoreBytes = 1024

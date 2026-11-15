@@ -23,7 +23,7 @@ func TestLog(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "store-test")
 			require.NoError(t, err)
-			defer os.RemoveAll(dir)
+			t.Cleanup(func() { require.NoError(t, os.RemoveAll(dir)) })
 			c := Config{}
 			c.Segment.MaxStoreBytes = 32
 			log, err := NewLog(dir, c)
@@ -48,7 +48,7 @@ func testAppendRead(t *testing.T, log *Log) {
 func testOutOfRangeErr(t *testing.T, log *Log) {
 	read, err := log.Read(1)
 	require.Nil(t, read)
-	require.Error(t, err)
+	require.Equal(t, api.ErrOffsetOutOfRange{Offset: 1}, err)
 }
 
 func testInitExisting(t *testing.T, o *Log) {

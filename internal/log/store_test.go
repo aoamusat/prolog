@@ -15,7 +15,7 @@ var (
 func TestStoreAppendRead(t *testing.T) {
 	f, err := os.CreateTemp("", "store_append_read_test")
 	require.NoError(t, err)
-	defer os.Remove(f.Name())
+	t.Cleanup(func() { require.NoError(t, os.Remove(f.Name())) })
 	s, err := newStore(f)
 	require.NoError(t, err)
 	testAppend(t, s)
@@ -66,7 +66,7 @@ func testReadAt(t *testing.T, s *store) {
 func TestStoreClose(t *testing.T) {
 	f, err := os.CreateTemp("", "store_close_test")
 	require.NoError(t, err)
-	defer os.Remove(f.Name())
+	t.Cleanup(func() { require.NoError(t, os.Remove(f.Name())) })
 	s, err := newStore(f)
 
 	require.NoError(t, err)
