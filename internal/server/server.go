@@ -18,16 +18,6 @@ type CommitLog interface {
 
 var _ api.LogServer = (*grpcServer)(nil)
 
-func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, error) {
-	gsrv := grpc.NewServer(opts...)
-	srv, err := newgrpcServer(config)
-	if err != nil {
-		return nil, err
-	}
-	api.RegisterLogServer(gsrv, srv)
-	return gsrv, nil
-}
-
 type grpcServer struct {
 	api.UnimplementedLogServer
 	*Config
@@ -40,6 +30,16 @@ func newgrpcServer(config *Config) (srv *grpcServer, err error) {
 	return srv, nil
 }
 
+func NewGRPCServer(config *Config, opts ...grpc.ServerOption) (*grpc.Server, error) {
+	gsrv := grpc.NewServer(opts...)
+	srv, err := newgrpcServer(config)
+	if err != nil {
+		return nil, err
+	}
+	api.RegisterLogServer(gsrv, srv)
+	return gsrv, nil
+}
+
 func (s *grpcServer) Produce(ctx context.Context, req *api.ProduceRequest) (
 	*api.ProduceResponse, error) {
 	offset, err := s.CommitLog.Append(req.Record)
@@ -48,6 +48,7 @@ func (s *grpcServer) Produce(ctx context.Context, req *api.ProduceRequest) (
 	}
 	return &api.ProduceResponse{Offset: offset}, nil
 }
+
 func (s *grpcServer) Consume(ctx context.Context, req *api.ConsumeRequest) (
 	*api.ConsumeResponse, error) {
 	record, err := s.CommitLog.Read(req.Offset)
