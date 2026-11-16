@@ -1,0 +1,16 @@
+{
+   "CN": "Hexcore CA",
+   "key": {
+      "algo": "rsa",
+      "size": 2048
+   },
+   "names": [
+      {
+         "C": "NG",
+         "L": "OY",
+         "ST": "Oyo",
+         "O": "HexcoreLtd",
+         "OU": "IT"
+      }
+   ]
+}
