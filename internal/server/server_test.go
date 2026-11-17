@@ -2,13 +2,14 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net"
-	"os"
 	"testing"
 
 	api "a4m.dev/prolog/api/v1"
 	"a4m.dev/prolog/internal/config"
 	"a4m.dev/prolog/internal/log"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -17,7 +18,8 @@ import (
 
 // setupTest creates a test server, client, and temporary commit log.
 func setupTest(t *testing.T, fn func(*Config)) (
-	client api.LogClient,
+	rootClient api.LogClient,
+	nobodyClient api.LogClient,
 	cfg *Config,
 	teardown func(),
 ) {
@@ -25,34 +27,59 @@ func setupTest(t *testing.T, fn func(*Config)) (
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
-	clientTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
-		CAFile:   config.CAFile,
-		CertFile: config.ClientCertFile,
-		KeyFile:  config.ClientKeyFile,
+	t.Cleanup(func() {
+		err := l.Close()
+		if !errors.Is(err, net.ErrClosed) {
+			require.NoError(t, err)
+		}
 	})
-	require.NoError(t, err)
 
-	clientCreds := credentials.NewTLS(clientTLSConfig)
+	newClient := func(crtPath, keyPath string) (
+		*grpc.ClientConn,
+		api.LogClient,
+	) {
+		tlsConfig, err := config.SetupTLSConfig(config.TLSConfig{
+			CertFile: crtPath,
+			KeyFile:  keyPath,
+			CAFile:   config.CAFile,
+			Server:   false,
+		})
+		require.NoError(t, err)
 
-	clientOptions := []grpc.DialOption{grpc.WithTransportCredentials(clientCreds)}
+		tlsCreds := credentials.NewTLS(tlsConfig)
+		opts := []grpc.DialOption{grpc.WithTransportCredentials(tlsCreds)}
+		conn, err := grpc.NewClient(l.Addr().String(), opts...)
+		require.NoError(t, err)
 
-	cc, err := grpc.NewClient(l.Addr().String(), clientOptions...)
-	require.NoError(t, err)
-	client = api.NewLogClient(cc)
-	dir, err := os.MkdirTemp("", "server-test")
-	require.NoError(t, err)
+		client := api.NewLogClient(conn)
+		return conn, client
+	}
+
+	var rootConn, nobodyConn *grpc.ClientConn
+	rootConn, rootClient = newClient(
+		config.RootClientCertFile,
+		config.RootClientKeyFile,
+	)
+	nobodyConn, nobodyClient = newClient(
+		config.NobodyClientCertFile,
+		config.NobodyClientKeyFile,
+	)
+
+	dir := t.TempDir()
+
 	serverTLSConfig, err := config.SetupTLSConfig(config.TLSConfig{
-		CertFile:      config.ServerCertFile,
-		KeyFile:       config.ServerKeyFile,
-		CAFile:        config.CAFile,
-		ServerAddress: l.Addr().String(),
-		Server:        true,
+		CertFile: config.ServerCertFile,
+		KeyFile:  config.ServerKeyFile,
+		CAFile:   config.CAFile,
+		Server:   true,
 	})
 	require.NoError(t, err)
+
 	serverCreds := credentials.NewTLS(serverTLSConfig)
-	require.NoError(t, err)
+
 	clog, err := log.NewLog(dir, log.Config{})
 	require.NoError(t, err)
+
 	cfg = &Config{
 		CommitLog: clog,
 	}
@@ -62,13 +89,17 @@ func setupTest(t *testing.T, fn func(*Config)) (
 	server, err := NewGRPCServer(cfg, grpc.Creds(serverCreds))
 	require.NoError(t, err)
 	go func() {
-		server.Serve(l)
+		if err := server.Serve(l); err != nil {
+			t.Errorf("serve gRPC: %v", err)
+		}
 	}()
-	return client, cfg, func() {
+	teardown = func() {
+		assert.NoError(t, rootConn.Close())
+		assert.NoError(t, nobodyConn.Close())
 		server.Stop()
-		cc.Close()
-		l.Close()
+		require.NoError(t, clog.Close())
 	}
+	return rootClient, nobodyClient, cfg, teardown
 }
 
 // TestServer exercises unary and streaming log operations.
@@ -76,6 +107,7 @@ func TestServer(t *testing.T) {
 	for scenario, fn := range map[string]func(
 		t *testing.T,
 		client api.LogClient,
+		nobodyClient api.LogClient,
 		config *Config,
 	){
 		"produce/consume a message to/from the log succeeds": testProduceConsume,
@@ -83,15 +115,15 @@ func TestServer(t *testing.T) {
 		"consume past log boundary fails":                    testConsumePastBoundary,
 	} {
 		t.Run(scenario, func(t *testing.T) {
-			client, config, teardown := setupTest(t, nil)
+			client, nobodyClient, config, teardown := setupTest(t, nil)
 			defer teardown()
-			fn(t, client, config)
+			fn(t, client, nobodyClient, config)
 		})
 	}
 }
 
 // testProduceConsume verifies producing and consuming a single record.
-func testProduceConsume(t *testing.T, client api.LogClient, config *Config) {
+func testProduceConsume(t *testing.T, client, nobodyClient api.LogClient, config *Config) {
 	ctx := context.Background()
 	want := &api.Record{
 		Value: []byte("hello world"),
@@ -115,6 +147,7 @@ func testProduceConsume(t *testing.T, client api.LogClient, config *Config) {
 func testConsumePastBoundary(
 	t *testing.T,
 	client api.LogClient,
+	nobodyClient api.LogClient,
 	config *Config,
 ) {
 	ctx := context.Background()
@@ -141,6 +174,7 @@ func testConsumePastBoundary(
 func testProduceConsumeStream(
 	t *testing.T,
 	client api.LogClient,
+	nobodyClient api.LogClient,
 	config *Config,
 ) {
 	ctx := context.Background()

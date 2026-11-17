@@ -12,6 +12,11 @@ all: build
 
 build: $(SERVER)
 
+$(CONFIG_PATH)/model.conf:
+	cp test/model.conf $(CONFIG_PATH)/model.conf
+$(CONFIG_PATH)/policy.csv:
+	cp test/policy.csv $(CONFIG_PATH)/policy.csv
+
 $(SERVER): $(shell find cmd internal -name '*.go') go.mod go.sum
 	@$(GO) build -o $@ ./cmd/server
 
@@ -41,6 +46,14 @@ gencert:
 		-ca-key=ca-key.pem \
 		-config=test/ca-config.json \
 		-profile=client \
-		test/client-csr.json | cfssljson -bare client
+		-cn="root" \
+		test/client-csr.json | cfssljson -bare root-client
+	cfssl gencert \
+		-ca=ca.pem \
+		-ca-key=ca-key.pem \
+		-config=test/ca-config.json \
+		-profile=client \
+		-cn="nobody" \
+		test/client-csr.json | cfssljson -bare nobody-client
 	mkdir -p "${CONFIG_PATH}"
 	mv *.pem *.csr "${CONFIG_PATH}"
