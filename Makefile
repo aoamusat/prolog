@@ -6,7 +6,7 @@ HOST ?= localhost
 GO ?= go
 CONFIG_PATH=${HOME}/.proglog/
 
-.PHONY: all build run clean test compile gencert
+.PHONY: all build run clean test compile gencert lint
 
 all: build
 
@@ -22,7 +22,9 @@ $(SERVER): $(shell find cmd internal -name '*.go') go.mod go.sum
 
 run: build
 	$(SERVER)
-
+lint:
+	$(GO) vet ./...
+	$(GO) fmt ./...
 clean:
 	rm -rf $(BUILD_DIR)
 
